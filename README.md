@@ -1,36 +1,88 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+<h1 align="center">🎨 AI Image Generator SaaS – Next.js 2026 🚀</h1>
 
-## Getting Started
+![Demo App](/public/screenshot-for-readme.png)
 
-First, run the development server:
+---
+
+## 🚀 Highlights
+
+- 🎨 AI Image Generation (powered by OpenAI)
+- 🏠 Premium Landing Page with 3D visuals & gradients
+- 🔐 Authentication via Clerk (Google, GitHub, Email & Password)
+- 🔑 Email Verification Flow
+- 🧠 Multiple AI Presets:
+  - Storybook
+  - Anime Cel
+  - Clay Render
+  - PixArt
+  - Voxel Block
+  - Marble Sculpture
+- 🧾 Image Generation History
+- 📊 User Dashboard (track generations left)
+- 💳 Subscription System:
+  - Free Plan → 3 generations/month
+  - Pro Plan ($19/month) → 75 generations
+  - Studio Plan ($29/month) → 175 generations
+- 🔄 Smart Upgrades (pay only the difference)
+- 📆 Monthly & Yearly Plans Support
+- 📩 Email Notifications & Receipts
+- 📂 PostgreSQL + Drizzle ORM
+- ⚡ Data Fetching with TanStack Query
+- 🎨 Tailwind CSS + Shadcn UI
+- 🛠️ Error Monitoring with Sentry
+- 🤖 AI-assisted development workflow (Cline)
+- 🚀 Deployment (free-tier friendly)
+
+---
+
+## 🧠 What You’ll Learn
+
+- How to build a real AI SaaS product from scratch
+- How to integrate OpenAI for image generation
+- Authentication & user management with Clerk
+- Subscription payments & upgrade logic
+- Database design with PostgreSQL + Drizzle
+- Building premium 3D landing pages
+- Production-ready architecture & workflows
+- Deploying your app with a live URL
+
+---
+
+## 🏗️ Tech Stack
+
+- **Framework:** Next.js (App Router)
+- **Language:** TypeScript
+- **UI:** Tailwind CSS + Shadcn
+- **Auth:** Clerk
+- **Database:** PostgreSQL (Neon) + Drizzle ORM
+- **Payments:** Clerk Billing
+- **AI:** OpenAI
+- **Monitoring:** Sentry
+- **Storage/CDN:** ImageKit
+
+---
+
+## ⚙️ .env Setup
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+DATABASE_URL="<your_database_url>"
+
+NEXT_PUBLIC_IMAGEKIT_PUBLIC_KEY="<your_imagekit_public_key>"
+IMAGEKIT_PRIVATE_KEY="<your_imagekit_private_key>"
+
+SENTRY_AUTH_TOKEN="<your_sentry_auth_token>"
+
+NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY="<your_clerk_publishable_key>"
+CLERK_SECRET_KEY="<your_clerk_secret_key>"
+
+OPEN_AI_API_KEY="<your_openai_api_key>"
+
+
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## 🚀 Run the app
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
-
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
-
-## Learn More
-
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+```bash
+npm install
+npm run dev
+```
