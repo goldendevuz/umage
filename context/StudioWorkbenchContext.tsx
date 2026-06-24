@@ -230,7 +230,8 @@ function useStudioWorkbenchValue({
       }));
     } catch {
       setResult(null);
-      setError("Something went wrong while generating the image.");
+      // setError("Something went wrong while generating the image.");
+      setError("You need to purchase a subscription to generate more images. Please check your account settings.");
     } finally {
       setIsLoading(false);
     }
