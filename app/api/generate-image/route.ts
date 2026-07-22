@@ -112,7 +112,14 @@ export async function POST(request: Request) {
     "Do not add extra people, extra limbs, duplicate subjects, or change the overall camera angle.",
   ].join("\n\n");
 
-  let lastError: unknown;
+  interface AppError {
+    message: string;
+    statusCode?: number;
+    responseBody?: string;
+    finishReason?: string;
+  }
+
+  let lastError: AppError | null = null;
 
   for (let attempt = 0; attempt < 2; attempt++) {
     try {
@@ -177,19 +184,28 @@ export async function POST(request: Request) {
         savedGeneration,
       });
     } catch (error: unknown) {
-      lastError = error;
+      const err = error as Record<string, unknown>;
+      const statusCode = typeof err.statusCode === "number" ? err.statusCode : 0;
+      const finishReason = typeof err.finishReason === "string" ? err.finishReason : "";
+      const responseBody = typeof err.responseBody === "string" ? err.responseBody : "";
+      const errorMessage = typeof err.message === "string" ? err.message : String(error);
 
-      const typedError = error as Record<string, unknown>;
-      const statusCode = typeof typedError.statusCode === "number" ? typedError.statusCode : 0;
-      const finishReason = typeof typedError.finishReason === "string" ? typedError.finishReason : "";
+      lastError = {
+        message: errorMessage,
+        statusCode,
+        responseBody,
+        finishReason,
+      };
+
+      console.error(`Gemini error (attempt ${attempt + 1}/2):`, {
+        message: errorMessage,
+        statusCode,
+        finishReason,
+        responseBody: responseBody.slice(0, 500),
+      });
 
       if (statusCode === 429) {
-        console.error("Gemini API quota exceeded", typedError.responseBody ?? "");
-
-        Sentry.logger.warn("gemini.quota_exceeded", {
-          statusCode,
-          responseBody: typedError.responseBody ?? "",
-        });
+        Sentry.logger.warn("gemini.quota_exceeded", lastError as unknown as Record<string, unknown>);
 
         return NextResponse.json(
           {
@@ -202,8 +218,6 @@ export async function POST(request: Request) {
       }
 
       if (finishReason === "SAFETY" || finishReason === "BLOCKLIST" || finishReason === "PROHIBITED_CONTENT") {
-        console.error("Gemini blocked the request", typedError);
-
         return NextResponse.json(
           { error: "Your request was blocked by content safety filters. Please try a different prompt or image." },
           { status: 400 },
@@ -214,23 +228,28 @@ export async function POST(request: Request) {
         continue;
       }
 
-      console.error("generate-image route failed", typedError);
-      const responseBody = typeof typedError.responseBody === "string" ? typedError.responseBody : "";
-      Sentry.logger.error("generation.gemini_error", {
-        error: String(lastError),
-        statusCode,
-        responseBody,
-      });
+      Sentry.logger.error("generation.gemini_error", lastError as unknown as Record<string, unknown>);
 
       return NextResponse.json(
-        { error: "An error occurred, please try again" },
+        {
+          error: "An error occurred, please try again",
+          details: {
+            message: errorMessage,
+            statusCode,
+          },
+        },
         { status: 500 },
       );
     }
   }
 
   return NextResponse.json(
-    { error: "An error occurred, please try again" },
+    {
+      error: "An error occurred, please try again",
+      details: lastError
+        ? { message: lastError.message, statusCode: lastError.statusCode }
+        : { message: "Unknown error after retries" },
+    },
     { status: 500 },
   );
 }

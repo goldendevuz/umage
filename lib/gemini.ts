@@ -41,14 +41,24 @@ export async function generateGeminiImage(params: {
     },
   };
 
-  const response = await fetch(
-    `${GEMINI_API_BASE}/models/${model}:generateContent?key=${apiKey}`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    },
-  );
+  let response: Response;
+  try {
+    response = await fetch(
+      `${GEMINI_API_BASE}/models/${model}:generateContent?key=${apiKey}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      },
+    );
+  } catch (networkError) {
+    const err = new Error(`Gemini network error: ${(networkError as Error).message}`);
+    (err as any).statusCode = 0;
+    (err as any).responseBody = JSON.stringify({
+      networkError: (networkError as Error).message,
+    });
+    throw err;
+  }
 
   if (!response.ok) {
     const errorBody = await response.text();
@@ -58,19 +68,29 @@ export async function generateGeminiImage(params: {
     throw err;
   }
 
-  const data = (await response.json()) as {
-    candidates?: Array<{
-      content?: {
-        parts?: Array<{
-          text?: string;
-          inlineData?: { mimeType: string; data: string };
-        }>;
-      };
-      finishReason?: string;
-    }>;
-  };
+  let data: Record<string, unknown>;
+  try {
+    data = (await response.json()) as Record<string, unknown>;
+  } catch (parseError) {
+    const err = new Error(`Gemini API invalid response: ${(parseError as Error).message}`);
+    (err as any).statusCode = response.status;
+    (err as any).responseBody = await response.text().catch(() => "could not read body");
+    throw err;
+  }
 
-  const candidate = data.candidates?.[0];
+  const candidates = data.candidates as
+    | Array<{
+        content?: {
+          parts?: Array<{
+            text?: string;
+            inlineData?: { mimeType: string; data: string };
+          }>;
+        };
+        finishReason?: string;
+      }>
+    | undefined;
+
+  const candidate = candidates?.[0];
   const imagePart = candidate?.content?.parts?.find(
     (p) => p.inlineData?.mimeType?.startsWith("image/"),
   );
