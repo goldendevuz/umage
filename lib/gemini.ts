@@ -1,4 +1,4 @@
-import { GoogleGenAI, RawReferenceImage } from "@google/genai";
+import { GoogleGenAI } from "@google/genai";
 
 export const GEMINI_API_KEY = process.env.GEMINI_API_KEY ?? null;
 
@@ -14,63 +14,61 @@ function getClient(): GoogleGenAI {
   return _client;
 }
 
+const MODEL_MAP: Record<string, string> = {
+  "nano-banana-pro-preview": "nano-banana-pro-preview",
+  "gemini-2.5-flash-image": "gemini-2.5-flash-image",
+};
+
+const DEFAULT_MODEL = "gemini-2.5-flash-image";
+
 export async function generateGeminiImage(params: {
   model: string;
   prompt: string;
   imageBuffer?: Buffer;
   mimeType?: string;
 }): Promise<{ imageBase64: string; mimeType: string }> {
-  const { prompt, imageBuffer, mimeType } = params;
+  const { model, prompt, imageBuffer, mimeType } = params;
   const client = getClient();
 
-  if (imageBuffer && mimeType) {
-    const ref = new RawReferenceImage();
-    ref.referenceImage = {
-      imageBytes: imageBuffer.toString("base64"),
-      mimeType,
-    };
+  const parts: Array<Record<string, unknown>> = [{ text: prompt }];
 
-    const response = await client.models.editImage({
-      model: "imagen-3.0-capability-001",
-      prompt,
-      referenceImages: [ref],
-      config: {
-        numberOfImages: 1,
-        aspectRatio: "1:1",
+  if (imageBuffer && mimeType) {
+    parts.push({
+      inlineData: {
+        mimeType,
+        data: imageBuffer.toString("base64"),
       },
     });
-
-    const image = response.generatedImages?.[0]?.image;
-    if (!image?.imageBytes) {
-      const err = new Error("Gemini did not return an image");
-      (err as any).finishReason = "NO_IMAGE";
-      throw err;
-    }
-
-    return {
-      imageBase64: image.imageBytes,
-      mimeType: image.mimeType ?? "image/png",
-    };
   }
 
-  const response = await client.models.generateImages({
-    model: "imagen-3.0-generate-002",
-    prompt,
+  const response = await (client.models as any).generateContent({
+    model: MODEL_MAP[model] ?? DEFAULT_MODEL,
+    contents: [{ role: "user", parts }],
     config: {
-      numberOfImages: 1,
-      aspectRatio: "1:1",
+      responseModalities: ["TEXT", "IMAGE"],
     },
   });
 
-  const image = response.generatedImages?.[0]?.image;
-  if (!image?.imageBytes) {
-    const err = new Error("Gemini did not return an image");
-    (err as any).finishReason = "NO_IMAGE";
+  const candidates: Array<Record<string, unknown>> = response.candidates ?? [];
+  const candidate = candidates[0] as Record<string, unknown> | undefined;
+  const content = candidate?.content as Record<string, unknown> | undefined;
+  const responseParts: Array<Record<string, unknown>> = (content?.parts as Array<Record<string, unknown>>) ?? [];
+
+  const imagePart = responseParts.find(
+    (p) =>
+      ((p.inlineData as Record<string, string> | undefined)?.mimeType ?? "").startsWith("image/"),
+  );
+
+  const inlineData = imagePart?.inlineData as Record<string, string> | undefined;
+  if (!inlineData?.data) {
+    const finishReason = String(candidate?.finishReason ?? "unknown");
+    const err = new Error(`Gemini did not return an image. finishReason: ${finishReason}`);
+    (err as any).finishReason = finishReason;
     throw err;
   }
 
   return {
-    imageBase64: image.imageBytes,
-    mimeType: image.mimeType ?? "image/png",
+    imageBase64: inlineData.data,
+    mimeType: inlineData.mimeType ?? "image/png",
   };
 }
