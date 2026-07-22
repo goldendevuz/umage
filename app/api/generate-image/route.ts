@@ -191,7 +191,7 @@ export async function POST(request: Request) {
       });
     } catch (error: unknown) {
       const err = error as Record<string, unknown>;
-      const statusCode = typeof err.statusCode === "number" ? err.statusCode : 0;
+      const statusCode = typeof err.statusCode === "number" ? err.statusCode : (typeof err.status === "number" ? err.status : 0);
       const finishReason = typeof err.finishReason === "string" ? err.finishReason : "";
       const responseBody = typeof err.responseBody === "string" ? err.responseBody : "";
       const errorMessage = typeof err.message === "string" ? err.message : String(error);

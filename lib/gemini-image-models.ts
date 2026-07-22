@@ -1,11 +1,11 @@
 export const geminiImageModels = [
-  "gemini-2.0-flash",
-  "gemini-2.0-flash-lite",
+  "imagen-3.0-generate-002",
+  "imagen-3.0-capability-001",
 ] as const;
 
 export type GeminiImageModel = (typeof geminiImageModels)[number];
 
 export const geminiImageModelLabels: Record<GeminiImageModel, string> = {
-  "gemini-2.0-flash": "Gemini 2.0 Flash",
-  "gemini-2.0-flash-lite": "Gemini 2.0 Flash Lite",
+  "imagen-3.0-generate-002": "Imagen 3.0 Generate",
+  "imagen-3.0-capability-001": "Imagen 3.0 Capability",
 };
