@@ -12,7 +12,7 @@ import { upload } from "@imagekit/next";
 import * as Sentry from "@sentry/nextjs";
 
 import type { GenerationQuotaSnapshot } from "@/lib/generation-quota";
-import { openAiImageModels, type OpenAiImageModel } from "@/lib/openai-image-models";
+import { geminiImageModels, type GeminiImageModel } from "@/lib/gemini-image-models";
 import { stylePresets, type StylePreset } from "@/lib/style-presets";
 import {
   GenerationHistorySummaryItem,
@@ -30,7 +30,7 @@ type StudioWorkbenchContextValue = {
   isLoading: boolean;
   quota: GenerationQuotaSnapshot;
   resultPreview: string | null;
-  selectedModel: OpenAiImageModel;
+  selectedModel: GeminiImageModel;
   selectedPreset: StylePreset;
   selectedStyle: string;
   sourcePreview: string | null;
@@ -39,7 +39,7 @@ type StudioWorkbenchContextValue = {
   handleSubmit: (event: SubmitEvent<HTMLFormElement>) => Promise<void>;
   openHistoryPreview: (item: GenerationHistorySummaryItem) => void;
   replaceFile: (nextFile: File | null) => void;
-  selectModel: (model: OpenAiImageModel) => void;
+  selectModel: (model: GeminiImageModel) => void;
   selectStyle: (styleSlug: string) => void;
 };
 
@@ -93,7 +93,7 @@ function useStudioWorkbenchValue({
   initialQuota,
 }: StudioWorkbenchProps): StudioWorkbenchContextValue {
   const [selectedStyle, setSelectedStyle] = useState(stylePresets[0]?.slug ?? "");
-  const [selectedModel, setSelectedModel] = useState<OpenAiImageModel>(openAiImageModels[0]);
+  const [selectedModel, setSelectedModel] = useState<GeminiImageModel>(geminiImageModels[0]);
   const [file, setFile] = useState<File | null>(null);
   const [uploadedSource, setUploadedSource] = useState<UploadedSource | null>(null);
   const [sourcePreview, setSourcePreview] = useState<string | null>(null);
@@ -230,8 +230,7 @@ function useStudioWorkbenchValue({
       }));
     } catch {
       setResult(null);
-      // setError("Something went wrong while generating the image.");
-      setError("You need to purchase a subscription to generate more images. Please check your account settings.");
+      setError("An error occurred, please try again");
     } finally {
       setIsLoading(false);
     }

@@ -4,10 +4,10 @@ import Link from "next/link";
 import { ChevronDownIcon, RefreshCcwIcon, SparklesIcon, UploadIcon } from "lucide-react";
 
 import {
-  openAiImageModels,
-  openAiImageModelLabels,
-  type OpenAiImageModel,
-} from "@/lib/openai-image-models";
+  geminiImageModels,
+  geminiImageModelLabels,
+  type GeminiImageModel,
+} from "@/lib/gemini-image-models";
 import { stylePresets } from "@/lib/style-presets";
 
 import { Button, buttonVariants } from "@/components/ui/button";
@@ -139,22 +139,22 @@ export function StudioControlsPanel() {
 
       <div className="studio-panel-inset mt-7 rounded-[1.8rem] border p-5">
         <div className="flex items-center justify-between gap-3">
-          <p className="text-[1.05rem] font-semibold text-foreground">3. OpenAI model</p>
+          <p className="text-[1.05rem] font-semibold text-foreground">3. Model</p>
           <SparklesIcon className="size-4 text-primary" />
         </div>
 
         <div className="mt-4 relative">
           <select
             value={selectedModel}
-            onChange={(event) => selectModel(event.target.value as OpenAiImageModel)}
+            onChange={(event) => selectModel(event.target.value as GeminiImageModel)}
             className={cn(
               buttonVariants({ variant: "outline" }),
               "h-auto w-full appearance-none rounded-[1.2rem] border-border/35 bg-background/25 px-4 py-3 pr-11 font-medium focus:border-primary",
             )}
           >
-            {openAiImageModels.map((model) => (
+            {geminiImageModels.map((model) => (
               <option key={model} value={model}>
-                {openAiImageModelLabels[model]}
+                {geminiImageModelLabels[model]}
               </option>
             ))}
           </select>
@@ -163,8 +163,7 @@ export function StudioControlsPanel() {
         </div>
 
         <p className="mt-3 text-sm leading-6 text-muted-foreground">
-          Only image-edit-capable OpenAI models are shown here, so generation stays compatible with
-          your uploaded-image workflow.
+          The selected model receives your uploaded image and prompt to produce a styled result.
         </p>
       </div>
 
@@ -175,7 +174,7 @@ export function StudioControlsPanel() {
       <GenerateButton disabled={isGenerateDisabled} isLoading={isLoading} />
 
       <p className="mt-5 text-center text-lg text-muted-foreground">
-        Styling is powered by OpenAI image edits.
+        Styling is powered by Google Gemini.
       </p>
 
       {error ? (

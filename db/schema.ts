@@ -1,4 +1,4 @@
-import { pgTable, uuid, text, timestamp } from "drizzle-orm/pg-core";
+import { pgTable, uuid, text, timestamp, integer, date } from "drizzle-orm/pg-core";
 
 export const generations = pgTable("generations", {
   id: uuid("id").defaultRandom().primaryKey(),
@@ -11,4 +11,10 @@ export const generations = pgTable("generations", {
   model: text("model").notNull(),
   promptUsed: text("prompt_used").notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+});
+
+export const dailyGeminiUsage = pgTable("daily_gemini_usage", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  date: date("date").notNull().unique(),
+  count: integer("count").notNull().default(0),
 });

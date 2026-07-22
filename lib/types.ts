@@ -1,5 +1,5 @@
 import type { GenerationQuotaSnapshot } from "@/lib/generation-quota";
-import type { OpenAiImageModel } from "@/lib/openai-image-models";
+import type { GeminiImageModel } from "@/lib/gemini-image-models";
 
 export type GenerationHistorySummaryItem = {
   id: string;
@@ -17,7 +17,7 @@ export type GenerationHistorySummaryItem = {
 export type GenerationResult = {
   imageBase64: string;
   mimeType: string;
-  model: OpenAiImageModel;
+  model: GeminiImageModel;
   savedGeneration: GenerationHistorySummaryItem;
   style: {
     slug: string;

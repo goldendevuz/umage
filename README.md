@@ -6,7 +6,7 @@
 
 ## 🚀 Highlights
 
-- 🎨 AI Image Generation (powered by OpenAI)
+- 🎨 AI Image Generation (powered by Google Gemini)
 - 🏠 Premium Landing Page with 3D visuals & gradients
 - 🔐 Authentication via Clerk (Google, GitHub, Email & Password)
 - 🔑 Email Verification Flow
@@ -38,7 +38,7 @@
 ## 🧠 What You’ll Learn
 
 - How to build a real AI SaaS product from scratch
-- How to integrate OpenAI for image generation
+- How to integrate Google Gemini for image generation
 - Authentication & user management with Clerk
 - Subscription payments & upgrade logic
 - Database design with PostgreSQL + Drizzle
@@ -56,7 +56,7 @@
 - **Auth:** Clerk
 - **Database:** PostgreSQL (Neon) + Drizzle ORM
 - **Payments:** Clerk Billing
-- **AI:** OpenAI
+- **AI:** Google Gemini
 - **Monitoring:** Sentry
 - **Storage/CDN:** ImageKit
 
@@ -75,7 +75,7 @@ SENTRY_AUTH_TOKEN="<your_sentry_auth_token>"
 NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY="<your_clerk_publishable_key>"
 CLERK_SECRET_KEY="<your_clerk_secret_key>"
 
-OPEN_AI_API_KEY="<your_openai_api_key>"
+GEMINI_API_KEY="<your_gemini_api_key>"
 
 
 ```

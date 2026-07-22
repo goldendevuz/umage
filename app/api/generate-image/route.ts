@@ -1,20 +1,16 @@
-import { countGenerationsSince, createGeneration, utcMonthStart } from "@/db/generations";
+import { countGenerationsSince, createGeneration, GEMINI_DAILY_LIMIT, getGeminiDailyUsageCount, incrementGeminiDailyUsage, utcMonthStart } from "@/db/generations";
 import { getMonthlyGenerationLimit } from "@/lib/generation-quota";
 import { auth } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
-import sharp from "sharp";
 
 import * as Sentry from "@sentry/nextjs";
-import { openaiProvider } from "@/lib/openai";
+import { generateGeminiImage, GEMINI_API_KEY } from "@/lib/gemini";
 import { ACCEPTED_SOURCE_IMAGE_MIME_TYPES } from "@/lib/constants";
 import { getStylePreset } from "@/lib/style-presets";
 
-import { APICallError, generateImage, NoImageGeneratedError } from "ai";
 import { uploadBufferToImageKit } from "@/lib/imagekit";
 
 export const runtime = "nodejs";
-
-type EditImageSize = "1024x1024" | "1536x1024" | "1024x1536";
 
 type GenerateImageRequest = {
   sourceImageUrl?: string;
@@ -23,28 +19,6 @@ type GenerateImageRequest = {
   styleSlug?: string;
   model?: string;
 };
-
-/**
- * inferImageSize reads width and height from the uploaded image (via sharp), computes aspect ratio,
- * and returns one of the allowed `size` values for OpenAI image edits.
- */
-async function inferImageSize(imageBuffer: Buffer): Promise<EditImageSize> {
-  try {
-    const metadata = await sharp(imageBuffer).metadata();
-
-    if (!metadata.width || !metadata.height) {
-      return "1024x1024";
-    }
-
-    const aspectRatio = metadata.width / metadata.height;
-
-    if (aspectRatio > 1.08) return "1536x1024"; // this means that the input image is wider than it is tall
-    if (aspectRatio < 0.92) return "1024x1536"; // this means that the input image is taller than it is wide
-    return "1024x1024"; // this means that the input image is square
-  } catch {
-    return "1024x1024";
-  }
-}
 
 export async function POST(request: Request) {
   const { userId, has } = await auth();
@@ -73,8 +47,8 @@ export async function POST(request: Request) {
     );
   }
 
-  if (!openaiProvider) {
-    return NextResponse.json({ error: "Missing OPENAI_API_KEY." }, { status: 500 });
+  if (!GEMINI_API_KEY) {
+    return NextResponse.json({ error: "Missing GEMINI_API_KEY." }, { status: 500 });
   }
 
   const body = (await request.json()) as GenerateImageRequest;
@@ -105,6 +79,24 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Unknown style preset." }, { status: 400 });
   }
 
+  const dailyUsed = await getGeminiDailyUsageCount();
+  if (dailyUsed >= GEMINI_DAILY_LIMIT) {
+    Sentry.logger.warn("gemini.daily_limit_reached", {
+      limit: GEMINI_DAILY_LIMIT,
+      used: dailyUsed,
+    });
+
+    return NextResponse.json(
+      {
+        error: `You've reached the daily free-tier limit of ${GEMINI_DAILY_LIMIT} images. Please purchase a subscription to continue generating images.`,
+        code: "DAILY_LIMIT_REACHED" as const,
+        limit: GEMINI_DAILY_LIMIT,
+        used: dailyUsed,
+      },
+      { status: 429 },
+    );
+  }
+
   const imageResponse = await fetch(sourceImageUrl);
   if (!imageResponse.ok) {
     return NextResponse.json(
@@ -114,122 +106,131 @@ export async function POST(request: Request) {
   }
 
   const imageBuffer = Buffer.from(await imageResponse.arrayBuffer());
-  const imageSize = await inferImageSize(imageBuffer);
 
   const prompt = [
     preset.prompt,
     "Do not add extra people, extra limbs, duplicate subjects, or change the overall camera angle.",
   ].join("\n\n");
 
-  try {
-    // generateImage =>
+  let lastError: unknown;
 
-    const result = await Sentry.startSpan(
-      {
-        name: `image edit ${model}`,
-        op: "gen_ai.request",
-        attributes: {
-          "gen_ai.request.model": model,
-          "gen_ai.operation.name": "request",
-          "gen_ai.request.messages": JSON.stringify([
-            { role: "user", content: prompt },
-            { role: "user", content: "[source image attachment omitted]" },
-          ]),
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      const result = await Sentry.startSpan(
+        {
+          name: `image edit ${model}`,
+          op: "gen_ai.request",
+          attributes: {
+            "gen_ai.request.model": model,
+            "gen_ai.operation.name": "request",
+            "gen_ai.request.messages": JSON.stringify([
+              { role: "user", content: prompt },
+              { role: "user", content: "[source image attachment omitted]" },
+            ]),
+          },
         },
-      },
-      async (span) => {
-        const out = await generateImage({
-          model: openaiProvider!.imageModel(model),
-          prompt: {
-            images: [imageBuffer],
-            text: prompt,
-          },
-          size: imageSize,
-          providerOptions: {
-            openai: {
-              input_fidelity: "high", // this means that the input image is used as a reference for the generation,
-              quality: "medium", // this means that the output image is of medium quality
-              output_format: "png",
-              user: userId,
-            },
-          },
+        () =>
+          generateGeminiImage({
+            model,
+            prompt,
+            imageBuffer,
+            mimeType: sourceMimeType,
+          }),
+      );
+
+      const { imageBase64, mimeType } = result;
+
+      const resultBuffer = Buffer.from(imageBase64, "base64");
+
+      const { url: resultImageUrl } = await uploadBufferToImageKit({
+        buffer: resultBuffer,
+        fileName: `${preset.slug}-result.png`,
+        folder: `/users/${userId}/results`,
+        mimeType: "image/png",
+      });
+
+      const savedGeneration = await createGeneration({
+        clerkUserId: userId,
+        originalFileName: typeof originalFileName === "string" ? originalFileName : null,
+        sourceImageUrl,
+        resultImageUrl,
+        styleSlug: preset.slug,
+        styleLabel: preset.label,
+        model,
+        promptUsed: prompt,
+      });
+
+      await incrementGeminiDailyUsage();
+
+      Sentry.logger.info("generation.completed", {
+        generationId: savedGeneration.id,
+        styleSlug: preset.slug,
+        model,
+      });
+
+      return NextResponse.json({
+        imageBase64,
+        mimeType,
+        promptUsed: prompt,
+        style: { slug: preset.slug, label: preset.label },
+        model,
+        savedGeneration,
+      });
+    } catch (error: unknown) {
+      lastError = error;
+
+      const typedError = error as Record<string, unknown>;
+      const statusCode = typeof typedError.statusCode === "number" ? typedError.statusCode : 0;
+      const finishReason = typeof typedError.finishReason === "string" ? typedError.finishReason : "";
+
+      if (statusCode === 429) {
+        console.error("Gemini API quota exceeded", typedError.responseBody ?? "");
+
+        Sentry.logger.warn("gemini.quota_exceeded", {
+          statusCode,
+          responseBody: typedError.responseBody ?? "",
         });
 
-        const u = out.usage;
-
-        if (u.inputTokens != null) {
-          span.setAttribute("gen_ai.usage.input_tokens", u.inputTokens);
-        }
-
-        if (u.outputTokens != null) {
-          span.setAttribute("gen_ai.usage.output_tokens", u.outputTokens);
-        }
-        if (u.totalTokens != null) {
-          span.setAttribute("gen_ai.usage.total_tokens", u.totalTokens);
-        }
-
-        span.setAttribute(
-          "gen_ai.response.text",
-          JSON.stringify(["[image/png generated; pixel data not sent to Sentry]"]),
+        return NextResponse.json(
+          {
+            error:
+              "You've reached the daily free-tier limit. Please purchase a subscription to continue generating images.",
+            code: "DAILY_LIMIT_REACHED" as const,
+          },
+          { status: 429 },
         );
+      }
 
-        return out;
-      },
-    );
+      if (finishReason === "SAFETY" || finishReason === "BLOCKLIST" || finishReason === "PROHIBITED_CONTENT") {
+        console.error("Gemini blocked the request", typedError);
 
-    const imageBase64 = result.image.base64;
+        return NextResponse.json(
+          { error: "Your request was blocked by content safety filters. Please try a different prompt or image." },
+          { status: 400 },
+        );
+      }
 
-    const resultBuffer = Buffer.from(imageBase64, "base64");
+      if (attempt === 0) {
+        continue;
+      }
 
-    const { url: resultImageUrl } = await uploadBufferToImageKit({
-      buffer: resultBuffer,
-      fileName: `${preset.slug}-result.png`,
-      folder: `/users/${userId}/results`,
-      mimeType: "image/png",
-    });
+      console.error("generate-image route failed", typedError);
+      const responseBody = typeof typedError.responseBody === "string" ? typedError.responseBody : "";
+      Sentry.logger.error("generation.gemini_error", {
+        error: String(lastError),
+        statusCode,
+        responseBody,
+      });
 
-    const savedGeneration = await createGeneration({
-      clerkUserId: userId,
-      originalFileName: typeof originalFileName === "string" ? originalFileName : null,
-      sourceImageUrl,
-      resultImageUrl,
-      styleSlug: preset.slug,
-      styleLabel: preset.label,
-      model,
-      promptUsed: prompt,
-    });
-
-    Sentry.logger.info("generation.completed", {
-      generationId: savedGeneration.id,
-      styleSlug: preset.slug,
-      model,
-    });
-
-    return NextResponse.json({
-      imageBase64,
-      mimeType: "image/png",
-      promptUsed: prompt,
-      style: { slug: preset.slug, label: preset.label },
-      model,
-      savedGeneration,
-    });
-  } catch (error) {
-    console.error("generate-image route failed", error);
-
-    if (APICallError.isInstance(error)) {
       return NextResponse.json(
-        { error: error.message || "Image generation failed. Please try again." },
-        { status: error.statusCode ?? 500 },
+        { error: "An error occurred, please try again" },
+        { status: 500 },
       );
     }
-
-    if (NoImageGeneratedError.isInstance(error)) {
-      return NextResponse.json({ error: "The model did not return an image." }, { status: 502 });
-    }
-
-    return NextResponse.json(
-      { error: "Image generation failed. Please try again." },
-      { status: 500 },
-    );
   }
+
+  return NextResponse.json(
+    { error: "An error occurred, please try again" },
+    { status: 500 },
+  );
 }
