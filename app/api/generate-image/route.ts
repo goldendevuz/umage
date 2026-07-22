@@ -24,7 +24,7 @@ export async function POST(request: Request) {
   const { userId, has } = await auth();
 
   if (!userId) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    return errorResponse("Unauthorized", 401);
   }
 
   const monthlyLimit = getMonthlyGenerationLimit(has);
@@ -48,7 +48,7 @@ export async function POST(request: Request) {
   }
 
   if (!GEMINI_API_KEY) {
-    return NextResponse.json({ error: "Missing GEMINI_API_KEY." }, { status: 500 });
+    return errorResponse("Missing GEMINI_API_KEY. Set the GEMINI_API_KEY environment variable.", 500);
   }
 
   const body = (await request.json()) as GenerateImageRequest;
@@ -56,27 +56,24 @@ export async function POST(request: Request) {
   const { model, originalFileName, sourceImageUrl, sourceMimeType, styleSlug } = body;
 
   if (!sourceImageUrl) {
-    return NextResponse.json({ error: "Please upload an image first." }, { status: 400 });
+    return errorResponse("Please upload an image first.", 400);
   }
 
   if (typeof sourceMimeType !== "string" || !ACCEPTED_SOURCE_IMAGE_MIME_TYPES.has(sourceMimeType)) {
-    return NextResponse.json(
-      { error: "Only JPG, PNG, and WEBP files are supported." },
-      { status: 400 },
-    );
+    return errorResponse("Only JPG, PNG, and WEBP files are supported.", 400);
   }
 
   if (typeof styleSlug !== "string") {
-    return NextResponse.json({ error: "Please choose a style." }, { status: 400 });
+    return errorResponse("Please choose a style.", 400);
   }
 
   if (!model) {
-    return NextResponse.json({ error: "Please choose a model." }, { status: 400 });
+    return errorResponse("Please choose a model.", 400);
   }
 
   const preset = getStylePreset(styleSlug);
   if (!preset) {
-    return NextResponse.json({ error: "Unknown style preset." }, { status: 400 });
+    return errorResponse("Unknown style preset.", 400);
   }
 
   const dailyUsed = await getGeminiDailyUsageCount();
@@ -97,12 +94,14 @@ export async function POST(request: Request) {
     );
   }
 
-  const imageResponse = await fetch(sourceImageUrl);
+  let imageResponse: Response;
+  try {
+    imageResponse = await fetch(sourceImageUrl);
+  } catch {
+    return errorResponse("Could not fetch the uploaded source image (network error).", 502);
+  }
   if (!imageResponse.ok) {
-    return NextResponse.json(
-      { error: "Could not fetch the uploaded source image." },
-      { status: 404 },
-    );
+    return errorResponse(`Could not fetch the uploaded source image (HTTP ${imageResponse.status}).`, 502);
   }
 
   const imageBuffer = Buffer.from(await imageResponse.arrayBuffer());
@@ -111,6 +110,13 @@ export async function POST(request: Request) {
     preset.prompt,
     "Do not add extra people, extra limbs, duplicate subjects, or change the overall camera angle.",
   ].join("\n\n");
+
+  function errorResponse(message: string, status: number, detail?: string) {
+    return NextResponse.json(
+      { error: message, ...(detail ? { details: detail } : {}) },
+      { status },
+    );
+  }
 
   interface AppError {
     message: string;
@@ -218,10 +224,7 @@ export async function POST(request: Request) {
       }
 
       if (finishReason === "SAFETY" || finishReason === "BLOCKLIST" || finishReason === "PROHIBITED_CONTENT") {
-        return NextResponse.json(
-          { error: "Your request was blocked by content safety filters. Please try a different prompt or image." },
-          { status: 400 },
-        );
+        return errorResponse("Your request was blocked by content safety filters. Please try a different prompt or image.", 400, `finishReason: ${finishReason}`);
       }
 
       if (attempt === 0) {
@@ -230,26 +233,11 @@ export async function POST(request: Request) {
 
       Sentry.logger.error("generation.gemini_error", lastError as unknown as Record<string, unknown>);
 
-      return NextResponse.json(
-        {
-          error: "An error occurred, please try again",
-          details: {
-            message: errorMessage,
-            statusCode,
-          },
-        },
-        { status: 500 },
-      );
+      return errorResponse("An error occurred, please try again", 500, `${errorMessage} (status: ${statusCode})`);
     }
   }
 
-  return NextResponse.json(
-    {
-      error: "An error occurred, please try again",
-      details: lastError
-        ? { message: lastError.message, statusCode: lastError.statusCode }
-        : { message: "Unknown error after retries" },
-    },
-    { status: 500 },
-  );
+  return errorResponse("An error occurred, please try again", 500, lastError
+    ? `${lastError.message} (status: ${lastError.statusCode})`
+    : "Unknown error after retries");
 }
